@@ -2,6 +2,7 @@ name: Upstream Sync
 
 permissions:
   contents: write
+  actions: write
 
 on:
   schedule:
@@ -15,23 +16,24 @@ jobs:
     if: ${{ github.event.repository.fork }}
 
     steps:
-      # Step 1: run a standard checkout action
       - name: Checkout target repo
-        uses: actions/checkout@v7
-
-      # Step 2: run the sync action
-      - name: Sync upstream changes
-        id: sync
-        uses: aormsby/Fork-Sync-With-Upstream-action@v3.4.3
+        uses: actions/checkout@v4
         with:
-          upstream_sync_repo: ChatGPTNextWeb/NextChat
-          upstream_sync_branch: main
-          target_sync_branch: main
-          target_repo_token: ${{ secrets.SYNC_TOKEN || secrets.GITHUB_TOKEN }}
-          test_mode: false
+          fetch-depth: 0
+          token: ${{ secrets.SYNC_TOKEN || secrets.GITHUB_TOKEN }}
 
-      - name: Sync check
-        if: failure()
+      - name: Sync upstream changes
         run: |
-          echo "[Error] 由于上游仓库更新失败，请检查 Actions 日志并确认 SYNC_TOKEN 是否有效。"
-          exit 1
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/ChatGPTNextWeb/NextChat.git 2>/dev/null || true
+          git fetch upstream main
+          if git merge -X ours upstream/main -m "chore: sync upstream changes" --no-edit; then
+            echo "Merged upstream changes successfully"
+          else
+            echo "Conflicts detected, resolving with ours..."
+            git checkout --ours .github/workflows/ || true
+            git add -A
+            git commit -m "chore: sync upstream changes" || true
+          fi
+          git push origin main
